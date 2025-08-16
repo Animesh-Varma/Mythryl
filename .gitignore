@@ -1,0 +1,6 @@
+.env
+.venv
+.idea/
+*.index
+temp/
+extracted_chats/
