@@ -12,7 +12,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 EXTRACTED_CHATS_DIR = os.path.join(PROJECT_ROOT, 'extracted_chats')
 TEMP_DIR = os.path.join(PROJECT_ROOT, 'temp')
 OUTPUT_CSV_PATH = os.path.join(TEMP_DIR, 'persona_style_v2.csv')
-DB_PATH = os.path.join(TEMP_DIR, 'my_style_v2.index')
+DB_PATH = os.path.join(TEMP_DIR, 'style_v2.index')
 TEXT_COLUMN = 'prompt'
 MODEL_NAME = 'all-MiniLM-L6-v2'
 
@@ -348,4 +348,4 @@ if __name__ == "__main__":
     create_vector_database(OUTPUT_CSV_PATH, TEXT_COLUMN, DB_PATH, MODEL_NAME)
 
     print("--- Setup Complete ---")
-    print("You can now run the chatbot using: python gemini_chat_final.py")
+    print("You can now run the chatbot using: python gemini_chat.py")

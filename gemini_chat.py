@@ -26,7 +26,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 load_dotenv()
 
 # --- Configuration ---
-INDEX_PATH = "temp/my_style_v2.index"
+INDEX_PATH = "temp/style_v2.index"
 CSV_PATH = "temp/persona_style_v2.csv"
 MODEL_NAME = "all-MiniLM-L6-v2"
 GEMINI_MODEL = "gemini-2.5-flash"
