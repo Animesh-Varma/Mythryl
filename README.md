@@ -43,10 +43,21 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 
 ### 1. Installation  
 
+Clone and enter the repo:
+ ```bash
+  git clone https://github.com/Animesh-Varma/Mythryl.git
+  cd Mythryl
+  ```
+
 Use Python 3.9 – 3.11. (Optional but recommended) Set up a virtual environment:
  ```bash
-  python -m venv .venv && source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+  python -m venv .venv 
   ```
+Activate your virtual environment:
+ ```bash
+  source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+  ```
+
 Then install the requirements:  
   ```bash
   pip install -r requirements.txt
