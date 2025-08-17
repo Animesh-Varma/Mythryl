@@ -1,16 +1,18 @@
 # Project TODO List
 
 ## 🐞 Fixes
-- [ ] 
 
 ---
 
 ## 🔧 Improvements/Features
 - [ ] Local API Implementation
-- [ ] Web-based UI
 - [ ] Support Multiple Social media platforms for data ingestion 
 - [ ] Add support for local LLM's
-- [ ] Add further config options
+- [ ] Web-based UI 
+- [ ] Add further config options (specifically, history size and conversation break time)
+- [ ] ASCII logo
+- [ ] Adaptive k Size for Persona Retrieval (find_similar_responses function in `gemini_chat.py`)
+- [ ]  Increase versatility of context dataset creation
 
 ---
 
