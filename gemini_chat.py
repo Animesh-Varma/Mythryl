@@ -1,3 +1,5 @@
+# gemini_chat.py
+
 import faiss
 import pandas as pd
 from sentence_transformers import SentenceTransformer
@@ -10,44 +12,41 @@ import os
 from dotenv import load_dotenv
 import threading
 
+# --- Global Settings ---
 DEBUG = False
-
-def log_debug(message):
-    if DEBUG:
-        print(f"[DEBUG] {message}")
-
-# Suppress the specific FutureWarning from the transformers library
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch.nn.modules.module")
 
-# --- Force UTF-8 for all output ---
+# --- Force UTF-8 for all I/O ---
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+# --- Environment and Configuration ---
 load_dotenv()
-
-# --- Configuration ---
 INDEX_PATH = "temp/style_v2.index"
 CSV_PATH = "temp/persona_style_v2.csv"
 MODEL_NAME = "all-MiniLM-L6-v2"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
+def log_debug(message):
+    """Prints a debug message to the console if DEBUG is True."""
+    if DEBUG:
+        print(f"[DEBUG] {message}")
+
+
 def load_resources(index_path, csv_path, model_name):
+    """Loads the FAISS index, persona CSV, and sentence transformer model."""
     print("Loading style databases...", end="", flush=True)
     try:
-        if not os.path.exists(index_path):
-            print(f"\nError: Index file not found at {index_path}")
-            print("Please run the setup script first: python setup.py")
-            return None, None, None
-        if not os.path.exists(csv_path):
-            print(f"\nError: CSV file not found at {csv_path}")
+        if not os.path.exists(index_path) or not os.path.exists(csv_path):
+            print(f"\nError: Database files not found.")
             print("Please run the setup script first: python setup.py")
             return None, None, None
 
         index = faiss.read_index(index_path)
         df = pd.read_csv(csv_path).dropna()
 
-        # Handle both old and new CSV formats
+        # Handle legacy CSV formats that may not have a 'type' column.
         if 'type' not in df.columns:
             df['type'] = 'legacy'
 
@@ -58,13 +57,14 @@ def load_resources(index_path, csv_path, model_name):
         print(f"\nAn unexpected error occurred while loading resources: {e}")
         return None, None, None
 
+
 def get_persona_choice(df):
+    """Displays available personas and prompts the user to select one."""
     personas = df['persona'].unique().tolist()
 
     print("\nAvailable personas for impersonation:")
     print("=" * 50)
 
-    # Show persona stats
     for i, persona in enumerate(personas):
         persona_data = df[df['persona'] == persona]
         total_examples = len(persona_data)
@@ -95,23 +95,27 @@ def get_persona_choice(df):
         except ValueError:
             print("Invalid input. Please enter a number.")
 
+
 def find_similar_responses(query, index, df, model, persona, k=5):
+    """Finds k most similar responses from the database for a given persona."""
     if persona == "Generic":
-        return pd.DataFrame()  # No style examples for generic
+        return pd.DataFrame()  # Return empty DataFrame for generic responses.
 
     query_vector = model.encode([query])
-    distances, indices = index.search(query_vector, k * 10)  # Get more candidates
+    # Search for more candidates initially to ensure we find enough for the persona.
+    distances, indices = index.search(query_vector, k * 10)
 
     valid_indices = [i for i in indices[0] if i < len(df)]
     retrieved_df = df.iloc[valid_indices]
     persona_specific_df = retrieved_df[retrieved_df['persona'] == persona]
 
+    # If no direct matches, fall back to the persona's general examples.
     if persona_specific_df.empty:
         similar_df = df[df['persona'] == persona].head(k)
         log_debug(f"Found {len(similar_df)} similar responses (fallback)")
         return similar_df
 
-    # Prioritize diverse response types if available
+    # Prioritize a diverse set of response types for better style capture.
     if 'type' in persona_specific_df.columns:
         diverse_responses = []
         types_seen = set()
@@ -121,6 +125,7 @@ def find_similar_responses(query, index, df, model, persona, k=5):
                 break
 
             response_type = row.get('type', 'unknown')
+            # Add response if its type hasn't been seen, or if we have already seen 3 types
             if response_type not in types_seen or len(types_seen) >= 3:
                 diverse_responses.append(row)
                 types_seen.add(response_type)
@@ -141,7 +146,9 @@ def find_similar_responses(query, index, df, model, persona, k=5):
     log_debug(f"Found {len(persona_specific_df)} similar responses")
     return persona_specific_df.head(k)
 
+
 def generate_gemini_prompt(query, conversation_history, similar_responses, persona, sender_name):
+    """Constructs the final prompt for the Gemini model based on context and persona."""
     style_examples = ""
     if not similar_responses.empty:
         for _, row in similar_responses.iterrows():
@@ -152,12 +159,14 @@ def generate_gemini_prompt(query, conversation_history, similar_responses, perso
             style_examples += f"Context/Prompt: \"{row['prompt']}\"\n"
             style_examples += f"{persona}'s Response: \"{row['response']}\"\n\n"
 
-    history = "\n".join(conversation_history[-6:])  # Limit history
+    # Use the last 6 messages to keep the context relevant.
+    history = "\n".join(conversation_history[-6:])
 
     if persona == "Generic":
         persona_instructions = f"You are {sender_name}. Respond naturally as yourself."
     else:
-        persona_instructions = f"""You are {sender_name} responding in a '{persona}' context. 
+        persona_instructions = f"""
+    You are {sender_name} responding in a '{persona}' context. 
     Study how {sender_name} communicates in {persona} situations from the examples and respond exactly as {sender_name} would in this context."""
 
     prompt = f"""
@@ -184,7 +193,9 @@ def generate_gemini_prompt(query, conversation_history, similar_responses, perso
     log_debug(f"Generated prompt for persona '{persona}'")
     return prompt
 
+
 def get_multi_line_input(persona):
+    """Allows the user to enter multi-line input."""
     if persona == "Generic":
         print("You (end with an empty line):")
     else:
@@ -195,10 +206,12 @@ def get_multi_line_input(persona):
         if line == "":
             break
         lines.append(line)
+    # Use a special token to represent line breaks for the model.
     return " [MSG_BREAK] ".join(lines)
 
+
 def spinning_animation(stop_event):
-    """Displays a spinning animation until the stop_event is set."""
+    """Displays a spinning CLI animation until the stop_event is set."""
     animation = ['|', '/', '-', '\\']
     idx = 0
     while not stop_event.is_set():
@@ -206,10 +219,13 @@ def spinning_animation(stop_event):
         sys.stdout.flush()
         idx += 1
         time.sleep(0.1)
-    sys.stdout.write('\r' + ' ' * 30 + '\r') # Clear the line
+    sys.stdout.write('\r' + ' ' * 30 + '\r')  # Clear the animation line.
     sys.stdout.flush()
 
+
 def main():
+    """Main function to run the chatbot application."""
+    # --- 1. API and Model Initialization ---
     try:
         api_key = os.getenv("API_KEY")
         if not api_key:
@@ -221,9 +237,12 @@ def main():
         print(f"API Key Error: {e}")
         return
 
+    # --- 2. Load Data Resources ---
     index, df, model = load_resources(INDEX_PATH, CSV_PATH, MODEL_NAME)
-    if index is None: return
+    if index is None:
+        return
 
+    # --- 3. Get Sender's Name ---
     SENDER_NAME_PATH = "temp/sender_name.txt"
     if os.path.exists(SENDER_NAME_PATH):
         with open(SENDER_NAME_PATH, "r", encoding="utf-8") as f:
@@ -237,10 +256,10 @@ def main():
             print("Sender name cannot be empty.")
             return
 
+    # --- 4. Chat Loop Setup ---
     chosen_persona = get_persona_choice(df)
     conversation_history = []
 
-    # Updated CLI display
     print(f"\n👤 Responding as: {sender_name}")
     if chosen_persona == "Generic":
         print(f"📝 Using: Generic response style")
@@ -250,14 +269,17 @@ def main():
     print("Commands: 'quit' to exit, 'switch' to change context")
     print("=" * 60)
 
+    # --- 5. Main Chat Loop ---
     while True:
         try:
             user_query = get_multi_line_input(chosen_persona)
-            if user_query.lower() == 'quit': break
+
+            # Handle commands
+            if user_query.lower() == 'quit':
+                break
             if user_query.lower() == 'switch':
                 chosen_persona = get_persona_choice(df)
                 conversation_history = []
-
                 print(f"\n👤 Still responding as: {sender_name}")
                 if chosen_persona == "Generic":
                     print(f"📝 Switched to: Generic response style")
@@ -266,6 +288,7 @@ def main():
                 print("=" * 60)
                 continue
 
+            # Find similar responses and generate a prompt for the LLM
             similar_responses = find_similar_responses(user_query, index, df, model, chosen_persona)
             prompt_for_gemini = generate_gemini_prompt(user_query, conversation_history, similar_responses, chosen_persona, sender_name)
 
@@ -273,27 +296,25 @@ def main():
             log_debug(prompt_for_gemini)
             log_debug("=== END PROMPT ===")
 
+            # Get response from the model with a thinking animation
             stop_animation = threading.Event()
             animation_thread = threading.Thread(target=spinning_animation, args=(stop_animation,))
             animation_thread.start()
-
             try:
                 response = gemini_model.generate_content(prompt_for_gemini)
             finally:
                 stop_animation.set()
                 animation_thread.join()
 
+            # Process and display the bot's response
             bot_responses = response.text.strip().split("[MSG_BREAK]")
-
-            for i, msg in enumerate(bot_responses):
+            for msg in bot_responses:
                 msg = msg.strip()
                 if msg:
                     print(f"{sender_name}: {msg}")
 
-            if chosen_persona == "Generic":
-                conversation_history.append(f"You: {user_query}")
-            else:
-                conversation_history.append(f"{chosen_persona}: {user_query}")
+            # Update conversation history
+            conversation_history.append(f"{chosen_persona if chosen_persona != 'Generic' else 'User'}: {user_query}")
             conversation_history.append(f"{sender_name}: {response.text.strip()}")
             if len(conversation_history) > 6:
                 conversation_history = conversation_history[-6:]
@@ -304,6 +325,7 @@ def main():
             print(f"An error occurred: {e}")
 
     print("\n" + "=" * 60 + "\nChat ended. Goodbye!")
+
 
 if __name__ == "__main__":
     main()
