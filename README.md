@@ -101,7 +101,7 @@ Feel free to open a pull request or issue for new features, bug fixes, or sugges
 ## Tested on
 
 1. Windows Home Version 24H2
-2. Arch Linux
+2. Arch Linux 
 3. Debian 6.1.135-1 (aarch64, running on a terminal emulator on my Pixel 9)
 
 ## Use of AI
@@ -112,10 +112,30 @@ That’s exactly the philosophy behind this project!
 The concept and core implementation are entirely my own, with invaluable assistance from AI systems, especially for rapid prototyping and improving code readability.
 Rest assured, all code was thoroughly tested and carefully reviewed by me before release.
 
+## Privacy
+
+This project uses a hybrid approach to data privacy, combining local processing with cloud-based AI services. Here’s how your data is handled at each stage:
+
+### Local Data Processing (`setup.py`)
+
+- **All your chat data stays on your local machine during setup.** The `setup.py` script reads your chat export files from the `extracted_chats` directory and processes them locally.
+- Generated files (`persona_style_v2.csv`, `style_v2.index`, and `sender_name.txt`) are stored in the `temp` directory on your computer.
+- **No chat data is sent to any external server or cloud service during this phase.** The sentence transformer model for vector embeddings is downloaded and runs entirely on your machine.
+
+### Cloud-Based AI Interaction (`gemini_chat.py`)
+
+- When you chat with the bot, certain pieces of information are sent to the **Google Gemini API** to generate responses. This is the only time your data leaves your local device.
+- The data sent to Gemini API includes:
+    - The message you type (your query)
+    - The last 6 messages of the ongoing conversation for context
+    - A few relevant examples from your own chat history (retrieved from your local `persona_style_v2.csv`) to help the AI match your style
+    - Your sender name and chosen persona context
+- Your **API key**, stored in the `.env` file, is used for secure authentication with the Gemini API.
+
 ## Contact
 
 Feel free to reach out if you have questions, suggestions, or want to collaborate!
-Email: animesh_varma@protonmail.com
+Email: `animesh_varma@protonmail.com`
 
 **NOTE:** I’m a high school student building this project in any spare time I can find, so contributors and general advice are always more than welcomed!
 Also, this is my first serious project, so please excuse any small mistakes :-) 
