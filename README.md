@@ -84,7 +84,7 @@ If you want to enable DEBUG mode or change specific paths or models, you can do 
 ## TODO & Contributions
 
 Contribute if you can, issues and feature requests are always appreciated!
-Future planned features, tasks, and any pending fixes are listed in the [TODO.md](TODO.md).
+Future planned features, tasks, and any pending fixes are listed in the [TODO.md](TODO.md) (Some items are a bit vague, so feel free to email me if you need clarification.)
 Feel free to open a pull request or issue for new features, bug fixes, or suggestions. Everyone is more than welcome!
 
 ## Tested on
