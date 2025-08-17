@@ -97,7 +97,7 @@ def get_persona_choice(df):
 
 
 def find_similar_responses(query, index, df, model, persona, k=5):
-    """Finds k most similar responses from the database for a given persona."""
+    """Finds k most similar responses from the database for the given persona."""
     if persona == "Generic":
         return pd.DataFrame()  # Return empty DataFrame for generic responses.
 
