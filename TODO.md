@@ -23,7 +23,7 @@
 ---
 
 ## 🧹 Chores
-- [ ] Update `requirements.txt` (August 16, 2025)
+- [x] Update `requirements.txt` (August 16, 2025)
 
 ---
 
