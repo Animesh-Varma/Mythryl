@@ -152,8 +152,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                     all_training_examples.append({
                         "prompt": "[CONVERSATION_START]",
                         "response": msg["content"],
-                        "persona": msg["persona"],
-                        "type": "initiation"
+                        "persona": msg["persona"]
                     })
 
                 # Example Type 2: CONTEXT-AWARE RESPONSES
@@ -178,8 +177,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                         all_training_examples.append({
                             "prompt": prompt,
                             "response": msg["content"],
-                            "persona": msg["persona"],
-                            "type": "contextual_response"
+                            "persona": msg["persona"]
                         })
 
                 # Example Type 3: DIRECT Q&A PAIRS
@@ -198,8 +196,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                             all_training_examples.append({
                                 "prompt": prev_msg["content"],
                                 "response": msg["content"],
-                                "persona": msg["persona"],
-                                "type": "direct_qa"
+                                "persona": msg["persona"]
                             })
 
                 # Example Type 4: TOPIC TRANSITIONS
@@ -219,33 +216,24 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                         all_training_examples.append({
                             "prompt": f"[TOPIC_SHIFT] Previous: {prev_context}",
                             "response": msg["content"],
-                            "persona": msg["persona"],
-                            "type": "topic_transition"
+                            "persona": msg["persona"]
                         })
 
     # 4. Write all generated examples to the output CSV file.
     with open(output_csv_file, "w", newline='', encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["prompt", "response", "persona", "type"])
+        writer.writerow(["prompt", "response", "persona"])
         for example in all_training_examples:
             writer.writerow([
                 example["prompt"],
                 example["response"],
-                example["persona"],
-                example["type"]
+                example["persona"]
             ])
 
     # 5. Print statistics about the generated dataset.
     total_examples = len(all_training_examples)
-    stats = {}
-    for example in all_training_examples:
-        stats[example["type"]] = stats.get(example["type"], 0) + 1
-
     print(f"Successfully created enhanced dataset: {output_csv_file}")
     print(f"Total training examples: {total_examples}")
-    for example_type, count in stats.items():
-        percentage = (count / total_examples) * 100
-        print(f"  - {example_type.replace('_', ' ').title()}: {count} ({percentage:.1f}%)")
 
 
 def create_vector_database(csv_path, text_column, db_path, model_name):
@@ -518,17 +506,14 @@ if __name__ == "__main__":
     if all_chat_files:
         print("\nChecking for consolidation opportunities...")
 
-        # Consolidate files in Personal directory
         print("Checking Personal directory...")
         consolidate_txt_files_in_directory(os.path.join(EXTRACTED_CHATS_DIR, 'Personal'))
 
-        # Consolidate files in Group directory
         print("Checking Group directory...")
         consolidate_txt_files_in_directory(os.path.join(EXTRACTED_CHATS_DIR, 'Group'))
 
         print("✓ Consolidation check completed!")
 
-        # Re-scan for txt files after consolidation
         print("\nFinal scan after consolidation...")
         personal_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Personal', '**', '*.txt'), recursive=True)
         group_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Group', '**', '*.txt'), recursive=True)
