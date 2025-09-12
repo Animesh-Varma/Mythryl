@@ -3,7 +3,6 @@
 import faiss
 import pandas as pd
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
 import sys
 import io
 import time
@@ -147,8 +146,8 @@ def find_similar_responses(query, index, df, model, persona, k=5):
     return persona_specific_df.head(k)
 
 
-def generate_gemini_prompt(query, conversation_history, similar_responses, persona, sender_name):
-    """Constructs the final prompt for the Gemini model based on context and persona."""
+def generate_llm_prompt(query, conversation_history, similar_responses, persona, sender_name):
+    """Constructs the final prompt for the LLM based on context and persona."""
     style_examples = ""
     if not similar_responses.empty:
         for _, row in similar_responses.iterrows():
@@ -225,16 +224,44 @@ def spinning_animation(stop_event):
 
 def main():
     """Main function to run the chatbot application."""
-    # --- 1. API and Model Initialization ---
-    try:
-        api_key = os.getenv("API_KEY")
-        if not api_key:
-            print("API Key not found. Please set it in your .env file.")
+    # --- 1. Service Selection ---
+    service_choice = input("Choose a service to use (gemini/ollama): ").strip().lower()
+
+    llm_model = None
+    ollama_model_name = None  # To store ollama model name if chosen
+
+    if service_choice == 'gemini':
+        # --- API and Model Initialization (Gemini) ---
+        try:
+            import google.generativeai as genai
+            api_key = os.getenv("API_KEY")
+            if not api_key:
+                print("API Key not found. Please set it in your .env file.")
+                return
+            genai.configure(api_key=api_key)
+            llm_model = genai.GenerativeModel(GEMINI_MODEL)
+            print("Using Gemini API.")
+        except Exception as e:
+            print(f"Gemini API Key Error: {e}")
             return
-        genai.configure(api_key=api_key)
-        gemini_model = genai.GenerativeModel(GEMINI_MODEL)
-    except Exception as e:
-        print(f"API Key Error: {e}")
+    elif service_choice == 'ollama':
+        # --- Model Initialization (Ollama) ---
+        try:
+            import ollama
+            ollama_model_name = os.getenv("OLLAMA_MODEL")
+            if not ollama_model_name:
+                print("Model name not found. Please set it in your .env file.")
+                return
+            llm_model = "ollama"
+            print(f"Using Ollama server with model: {ollama_model_name}")
+        except ImportError:
+            print("Ollama library not found. Please install it with 'pip install ollama'")
+            return
+        except Exception as e:
+            print(f"Ollama connection error: {e}")
+            return
+    else:
+        print("Invalid service choice. Exiting.")
         return
 
     # --- 2. Load Data Resources ---
@@ -290,24 +317,30 @@ def main():
 
             # Find similar responses and generate a prompt for the LLM
             similar_responses = find_similar_responses(user_query, index, df, model, chosen_persona)
-            prompt_for_gemini = generate_gemini_prompt(user_query, conversation_history, similar_responses, chosen_persona, sender_name)
+            prompt_for_llm = generate_llm_prompt(user_query, conversation_history, similar_responses, chosen_persona, sender_name)
 
             log_debug("=== FULL PROMPT BEING SENT TO LLM ===")
-            log_debug(prompt_for_gemini)
+            log_debug(prompt_for_llm)
             log_debug("=== END PROMPT ===")
 
             # Get response from the model with a thinking animation
             stop_animation = threading.Event()
             animation_thread = threading.Thread(target=spinning_animation, args=(stop_animation,))
             animation_thread.start()
+            bot_response_text = ""
             try:
-                response = gemini_model.generate_content(prompt_for_gemini)
+                if service_choice == 'gemini':
+                    response = llm_model.generate_content(prompt_for_llm)
+                    bot_response_text = response.text
+                elif service_choice == 'ollama':
+                    response = llm_model.chat(model=ollama_model_name, messages=[{'role': 'user', 'content': prompt_for_llm}])
+                    bot_response_text = response['message']['content']
             finally:
                 stop_animation.set()
                 animation_thread.join()
 
             # Process and display the bot's response
-            bot_responses = response.text.strip().split("[MSG_BREAK]")
+            bot_responses = bot_response_text.strip().split("[MSG_BREAK]")
             for msg in bot_responses:
                 msg = msg.strip()
                 if msg:
@@ -315,7 +348,7 @@ def main():
 
             # Update conversation history
             conversation_history.append(f"{chosen_persona if chosen_persona != 'Generic' else 'User'}: {user_query}")
-            conversation_history.append(f"{sender_name}: {response.text.strip()}")
+            conversation_history.append(f"{sender_name}: {bot_response_text.strip()}")
             if len(conversation_history) > 6:
                 conversation_history = conversation_history[-6:]
 
