@@ -12,21 +12,26 @@ from dotenv import load_dotenv
 import threading
 import re
 
+from sympy import false
+
 # --- Global Settings ---
-DEBUG = False
+load_dotenv()
+DEBUG = os.getenv("DEBUG", False)
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch.nn.modules.module")
 
 # --- Force UTF-8 for all I/O ---
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-
-# --- Environment and Configuration ---
-load_dotenv()
 INDEX_PATH = "temp/style_v2.index"
 CSV_PATH = "temp/persona_style_v2.csv"
 MODEL_NAME = "all-MiniLM-L6-v2"
 GEMINI_MODEL = "gemini-2.5-flash"
 
+# --- LLM Parameters ---
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.7))
+LLM_TOP_P = float(os.getenv("LLM_TOP_P", 0.9))
+LLM_CONTEXT_SIZE = int(os.getenv("LLM_CONTEXT_SIZE", 6))
+VECTOR_DB_SEARCH_COUNT = int(os.getenv("VECTOR_DB_SEARCH_COUNT", 5))
 
 def log_debug(message):
     """Prints a debug message to the console if DEBUG is True."""
@@ -45,10 +50,6 @@ def load_resources(index_path, csv_path, model_name):
 
         index = faiss.read_index(index_path)
         df = pd.read_csv(csv_path).dropna()
-
-        # Handle legacy CSV formats that may not have a 'type' column.
-        if 'type' not in df.columns:
-            df['type'] = 'legacy'
 
         model = SentenceTransformer(model_name)
         print("Done.")
@@ -69,13 +70,7 @@ def get_persona_choice(df):
         persona_data = df[df['persona'] == persona]
         total_examples = len(persona_data)
 
-        if 'type' in df.columns:
-            type_counts = persona_data['type'].value_counts()
-            type_info = ", ".join([f"{t.replace('_', ' ')}: {c}" for t, c in type_counts.items()])
-            print(f"[{i + 1}] {persona} ({total_examples} examples)")
-            print(f"    Training types: {type_info}")
-        else:
-            print(f"[{i + 1}] {persona} ({total_examples} examples)")
+        print(f"[{i + 1}] {persona} ({total_examples} examples)")
 
     print(f"[{len(personas) + 1}] Generic Response (no persona)")
     print("=" * 50)
@@ -96,7 +91,7 @@ def get_persona_choice(df):
             print("Invalid input. Please enter a number.")
 
 
-def find_similar_responses(query, index, df, model, persona, k=5):
+def find_similar_responses(query, index, df, model, persona, k):
     """Finds k most similar responses from the database for the given persona."""
     if persona == "Generic":
         return pd.DataFrame()  # Return empty DataFrame for generic responses.
@@ -115,30 +110,12 @@ def find_similar_responses(query, index, df, model, persona, k=5):
         log_debug(f"Found {len(similar_df)} similar responses (fallback)")
         return similar_df
 
-    # Prioritize a diverse set of response types for better style capture.
-    if 'type' in persona_specific_df.columns:
-        diverse_responses = []
-        types_seen = set()
-
-        for _, row in persona_specific_df.iterrows():
-            if len(diverse_responses) >= k:
-                break
-
-            response_type = row.get('type', 'unknown')
-            # Add response if its type hasn't been seen, or if we have already seen 3 types
-            if response_type not in types_seen or len(types_seen) >= 3:
-                diverse_responses.append(row)
-                types_seen.add(response_type)
-
-        result_df = pd.DataFrame(diverse_responses)
-        log_debug(f"Found {len(result_df)} diverse responses with types: {types_seen}")
-        return result_df
+    
 
     if not persona_specific_df.empty:
         log_debug(f"=== EXTRACTED DATABASE VALUES for '{persona}' ===")
         for idx, (_, row) in enumerate(persona_specific_df.head(k).iterrows()):
-            response_type = row.get('type', 'unknown')
-            log_debug(f"Example {idx + 1} [{response_type}]:")
+            log_debug(f"Example {idx + 1}:")
             log_debug(f"  Prompt: {row['prompt'][:100]}...")
             log_debug(f"  Response: {row['response'][:100]}...")
         log_debug("=== END EXTRACTED VALUES ===")
@@ -152,15 +129,11 @@ def generate_llm_prompt(query, conversation_history, similar_responses, persona,
     style_examples = ""
     if not similar_responses.empty:
         for _, row in similar_responses.iterrows():
-            response_type = row.get('type', 'response')
-            type_label = response_type.replace('_', ' ').title()
-
-            style_examples += f"[{type_label}]\n"
             style_examples += f"Context/Prompt: \"{row['prompt']}\"\n"
             style_examples += f"{persona}'s Response: \"{row['response']}\"\n\n"
 
-    # Use the last 6 messages to keep the context relevant.
-    history = "\n".join(conversation_history[-6:])
+    # Use the last N messages to keep the context relevant.
+    history = "\n".join(conversation_history[-LLM_CONTEXT_SIZE:])
 
     if persona == "Generic":
         persona_instructions = f"You are {sender_name}. Respond naturally as yourself."
@@ -317,7 +290,7 @@ def main():
                 continue
 
             # Find similar responses and generate a prompt for the LLM
-            similar_responses = find_similar_responses(user_query, index, df, model, chosen_persona)
+            similar_responses = find_similar_responses(user_query, index, df, model, chosen_persona, VECTOR_DB_SEARCH_COUNT)
             prompt_for_llm = generate_llm_prompt(user_query, conversation_history, similar_responses, chosen_persona, sender_name)
 
             log_debug("=== FULL PROMPT BEING SENT TO LLM ===")
@@ -331,10 +304,24 @@ def main():
             bot_response_text = ""
             try:
                 if service_choice == 'gemini':
-                    response = llm_model.generate_content(prompt_for_llm)
+                    generation_config = genai.types.GenerationConfig(
+                        temperature=LLM_TEMPERATURE,
+                        top_p=LLM_TOP_P
+                    )
+                    response = llm_model.generate_content(
+                        prompt_for_llm,
+                        generation_config=generation_config
+                    )
                     bot_response_text = response.text
                 elif service_choice == 'ollama':
-                    response = llm_model.chat(model=ollama_model_name, messages=[{'role': 'user', 'content': prompt_for_llm}])
+                    response = llm_model.chat(
+                        model=ollama_model_name,
+                        messages=[{'role': 'user', 'content': prompt_for_llm}],
+                        options={
+                            'temperature': LLM_TEMPERATURE,
+                            'top_p': LLM_TOP_P
+                        }
+                    )
                     bot_response_text = response['message']['content']
                     if not DEBUG:
                         bot_response_text = re.sub(r'<think>.*?</think>', '', bot_response_text, flags=re.DOTALL).strip()
@@ -352,8 +339,8 @@ def main():
             # Update conversation history
             conversation_history.append(f"{chosen_persona if chosen_persona != 'Generic' else 'User'}: {user_query}")
             conversation_history.append(f"{sender_name}: {bot_response_text.strip()}")
-            if len(conversation_history) > 6:
-                conversation_history = conversation_history[-6:]
+            if len(conversation_history) > LLM_CONTEXT_SIZE:
+                conversation_history = conversation_history[-LLM_CONTEXT_SIZE:]
 
         except KeyboardInterrupt:
             break
