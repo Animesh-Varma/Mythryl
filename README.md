@@ -4,9 +4,12 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 
 ## Features
 
+- **Multi-Service Support:** Works with both cloud-based (Gemini) and local (Ollama) language models.
+- **Automatic Data Processing:** Extracts chat logs from `.zip` files directly from whatsapp
 - **Intelligent Conversation Context Analysis:** The bot creates diverse training datasets with conversation initiations, contextual responses, direct Q&As, and topic transitions.
 - **RAG-Powered Pipeline:** Implements Retrieval-Augmented Generation (RAG) using FAISS vector search to find relevant conversation examples and enhance AI responses with authentic communication patterns.
 - **Context-Aware Response Generation:** Combines vector similarity search and actual conversation history to generate replies that reflect both the style and context of your chosen persona.
+- **Configurable LLM Parameters:** Easily customize LLM temperature, top-p, context size, and search count via the env variables 
 - **One-Click Setup & Auto-Configuration:** Automatically processes WhatsApp chat exports, creates vector databases, validates sender names, and sets up the entire RAG pipeline with minimal intervention from you!!
 
 ## How It Works
@@ -14,30 +17,34 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 ### **Setup Phase: `setup.py`**
 
 **Initial Setup & Validation:**
-- Creates temp/ and extracted_chats/ directories, each with Personal/ and Group/ subfolders, then waits for you to upload chat files
-- Scans for WhatsApp chat `.txt` files and displays persona statistics
-- Validates the if the provided sender name exists in the chat files before proceeding
-- Saves sender name to `temp/sender_name.txt` for future use
+- Creates `temp/` and `extracted_chats/` directories, each with `Personal/` and `Group/` subfolders, then waits for you to upload chat files.
+- **Automatically extracts `.zip` archives and consolidates `.txt` files**, simplifying persona management.
+- Scans for WhatsApp chat `.txt` files and displays persona statistics.
+- Validates that the provided sender name exists in the chat files before proceeding.
+- Saves sender name to `temp/sender_name.txt` for future use.
 
 **Intelligent Chat Processing:**
-- Parses WhatsApp export format using regex (timestamp, sender, message)
-- Consolidates consecutive messages from the same sender and detects conversation breaks (gaps of several hours)
-- Creates 4 types of training examples: conversation starters, contextual responses, direct Q&A pairs, and topic transitions
-- Exports processed data to `temp/persona_style_v2.csv` with relevant metadata
+- Parses WhatsApp export format using regex (timestamp, sender, message).
+- Consolidates consecutive messages from the same sender and detects conversation breaks (gaps of several hours).
+- Creates 4 types of training examples: **conversation starters, contextual responses, direct Q&A pairs, and topic transitions.**
+- Exports processed data to `temp/persona_style_v2.csv` with relevant metadata.
 
 **Vector Database Creation:**
-- Encodes all conversation prompts using SentenceTransformer model
-- Builds FAISS vector index for semantic similarity search
-- Saves index to `temp/style_v2.index` for fast retrieval
+- Encodes all conversation prompts using the `all-MiniLM-L6-v2` SentenceTransformer model.
+- Builds a FAISS vector index for semantic similarity search.
+- Saves the index to `temp/style_v2.index` for fast retrieval.
 
 
 ### **Chat Phase: `gemini_chat.py`**
 
+**Service Selection:**
+- Prompts you to choose between the `gemini` (cloud) or `ollama` (local) service.
+
 **RAG-Powered Response Generation:**
-- Loads FAISS index, conversation dataset, and AI model
-- Performs semantic search to find similar conversation examples for your query
-- Combines retrieved examples with conversation history to create context-rich prompts
-- Uses Google Gemini to generate responses that match the persona’s communication style
+- Loads the FAISS index, conversation dataset, and the selected AI model.
+- Performs a semantic search to find similar conversation examples for your query.
+- Combines retrieved examples with conversation history to create context-rich prompts for th LLM.
+- Uses the chosen LLM (Gemini or Ollama) to generate responses that match the communication style for the given persona.
 
 ## Setup and Usage
 
@@ -58,7 +65,12 @@ Activate your virtual environment:
   source .venv/bin/activate  # on Windows: .venv\Scripts\activate
   ```
 
-Then install the requirements:  
+Then install the requirements:
+
+**Note**: You can customize the installation based on your needs. By default, it will install dependencies for both online and offline inference.
+- For online inference only: Remove `ollama` from `requirements.txt`.
+- For offline inference only: Remove `google-generativeai` from `requirements.txt`.
+
   ```bash
   pip install -r requirements.txt
   ```
@@ -70,15 +82,34 @@ To get the chatbot ready, run the setup script and just follow the on-screen ins
    python setup.py
    ```
 **Important:** 
-If not running for the first time place each exported WhatsApp .txt file in the auto created folder `extracted_chats` before running the setup script
+If not running for the first time place each exported WhatsApp .txt/.zip file in the auto created folder `extracted_chats` before running the setup script
 
-### 3. Setting an API key  
+### 3. Setting Environment Variables
 
-Save your API key in the following format in a `.env` file located in the same directory as your `gemini_chat.py` file:
-```txt
-API_KEY=YOUR_GEMINI_API_KEY_HERE
-```
+Create a `.env` file in the root directory and add the following variables.
 
+- **For Gemini (Cloud-based):**
+  ```env
+  API_KEY=YOUR_GEMINI_API_KEY_HERE
+  ```
+
+- **For Ollama (Local):**
+  ```env
+  OLLAMA_MODEL=NAME_OF_THE_LOCAL_MODEL_TO_USE
+  ```
+
+- **Optional LLM Parameters:**
+  ```env
+  LLM_TEMPERATURE=0.7 
+  LLM_TOP_P=0.9
+  LLM_CONTEXT_SIZE=6
+  VECTOR_DB_SEARCH_COUNT=5
+  ```
+- **Optional Script Parameters:**
+  ```env
+  DEBUG = False
+  ```
+  
 ### 4. Running the Chatbot 
 
 Once your data files are ready, you can chat with your personalized AI by running:
@@ -89,8 +120,9 @@ Inside the chat session: type **`switch`** to change persona or **`quit`** to ex
 
 ## Config
 
-Currently, the only configuration required is adding your API key to the .env file.
-If you want to enable DEBUG mode or change specific paths or models, you can do that directly in the scripts.
+Configuration is managed through the `.env` file. You can set your API key, choose your Ollama model, and adjust LLM and script parameters. 
+If you want to change specific paths, gemini models or system prompts, you can do that directly in the scripts.
+[I'd suggest using gemini for generation as it works a lot better in my testing, the default gemini model is 2.5 flash]
 
 ## TODO & Contributions
 

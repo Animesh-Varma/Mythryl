@@ -5,3 +5,4 @@ tqdm
 google-generativeai
 numpy~=2.3.2
 python-dotenv
+ollama

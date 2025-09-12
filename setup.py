@@ -19,8 +19,10 @@ import pandas as pd
 import faiss
 from sentence_transformers import SentenceTransformer
 from datetime import datetime, timedelta
+import zipfile
 
 # --- Configuration ---
+_PREFIX_RE = re.compile(r'^(?:whatsapp\s+chat\s+with\s+)', re.IGNORECASE)
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 EXTRACTED_CHATS_DIR = os.path.join(PROJECT_ROOT, 'extracted_chats')
 TEMP_DIR = os.path.join(PROJECT_ROOT, 'temp')
@@ -150,8 +152,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                     all_training_examples.append({
                         "prompt": "[CONVERSATION_START]",
                         "response": msg["content"],
-                        "persona": msg["persona"],
-                        "type": "initiation"
+                        "persona": msg["persona"]
                     })
 
                 # Example Type 2: CONTEXT-AWARE RESPONSES
@@ -176,8 +177,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                         all_training_examples.append({
                             "prompt": prompt,
                             "response": msg["content"],
-                            "persona": msg["persona"],
-                            "type": "contextual_response"
+                            "persona": msg["persona"]
                         })
 
                 # Example Type 3: DIRECT Q&A PAIRS
@@ -196,8 +196,7 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                             all_training_examples.append({
                                 "prompt": prev_msg["content"],
                                 "response": msg["content"],
-                                "persona": msg["persona"],
-                                "type": "direct_qa"
+                                "persona": msg["persona"]
                             })
 
                 # Example Type 4: TOPIC TRANSITIONS
@@ -217,33 +216,24 @@ def create_context_dataset(chat_files, output_csv_file, user_sender_name):
                         all_training_examples.append({
                             "prompt": f"[TOPIC_SHIFT] Previous: {prev_context}",
                             "response": msg["content"],
-                            "persona": msg["persona"],
-                            "type": "topic_transition"
+                            "persona": msg["persona"]
                         })
 
     # 4. Write all generated examples to the output CSV file.
     with open(output_csv_file, "w", newline='', encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["prompt", "response", "persona", "type"])
+        writer.writerow(["prompt", "response", "persona"])
         for example in all_training_examples:
             writer.writerow([
                 example["prompt"],
                 example["response"],
-                example["persona"],
-                example["type"]
+                example["persona"]
             ])
 
     # 5. Print statistics about the generated dataset.
     total_examples = len(all_training_examples)
-    stats = {}
-    for example in all_training_examples:
-        stats[example["type"]] = stats.get(example["type"], 0) + 1
-
     print(f"Successfully created enhanced dataset: {output_csv_file}")
     print(f"Total training examples: {total_examples}")
-    for example_type, count in stats.items():
-        percentage = (count / total_examples) * 100
-        print(f"  - {example_type.replace('_', ' ').title()}: {count} ({percentage:.1f}%)")
 
 
 def create_vector_database(csv_path, text_column, db_path, model_name):
@@ -339,8 +329,142 @@ def display_persona_statistics(chat_files):
     print(f"Personas: {', '.join(sorted(personas))}")
     print("-------------------------\n")
 
+def consolidate_txt_files_in_directory(parent_dir):
+    """
+    Consolidates multiple .txt files in each subfolder into a single file
+    named after the folder.
+    """
+    if not os.path.exists(parent_dir):
+        return
 
-# --- Main Execution ---
+    # Get all subdirectories
+    subfolders = [f.path for f in os.scandir(parent_dir) if f.is_dir()]
+
+    for folder in subfolders:
+        # Look for txt files recursively in case zip extraction created nested folders
+        txt_files = glob.glob(os.path.join(folder, '**', '*.txt'), recursive=True)
+
+        if len(txt_files) >= 2:
+            folder_name = os.path.basename(folder)
+            consolidated_path = os.path.join(folder, f"{folder_name}.txt")
+
+            print(f"Consolidating {len(txt_files)} files in folder '{folder_name}'...")
+
+            # Create consolidated file
+            with open(consolidated_path, 'w', encoding='utf-8') as outfile:
+                for i, txt_file in enumerate(txt_files):
+                    try:
+                        with open(txt_file, 'r', encoding='utf-8') as infile:
+                            content = infile.read().strip()
+                            if content:  # Only add non-empty content
+                                outfile.write(content)
+                                # Add separator between files (except for the last one)
+                                if i < len(txt_files) - 1:
+                                    outfile.write('\n\n')
+                    except Exception as e:
+                        print(f"Warning: Could not read {txt_file}: {str(e)}")
+
+            # Remove original files (except the consolidated one)
+            files_removed = 0
+            for txt_file in txt_files:
+                if txt_file != consolidated_path:
+                    try:
+                        os.remove(txt_file)
+                        files_removed += 1
+                    except Exception as e:
+                        print(f"Warning: Could not remove {txt_file}: {str(e)}")
+
+            print(f"Consolidated into '{folder_name}.txt' and removed {files_removed} original files.")
+
+def sanitize_txt_basename(basename: str) -> str:
+    """
+    Remove the 'WhatsApp Chat with ' prefix (case-insensitive) from .txt filenames.
+    """
+    name, ext = os.path.splitext(basename)
+    if ext.lower() != ".txt":
+        return basename
+    new_name = _PREFIX_RE.sub("", name, count=1).strip()
+    if not new_name:
+        new_name = name
+    return f"{new_name}{ext}"
+
+def _decode_text(data: bytes) -> str:
+    for enc in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="ignore")
+
+def extract_all_zip_files(base_dir: str) -> bool:
+    """
+    Extract all .zip files under base_dir.
+    - Only reads .txt members.
+    - Strips 'WhatsApp Chat with ' from basenames.
+    - Merges same sanitized names ordered by each ZIP member's timestamp.
+    - If a sanitized .txt already exists on disk, include it (by mtime) in the merge.
+    Returns True if anything was extracted or merged, else False.
+    """
+    extracted_any = False
+    pending_merges = {}  # out_path -> list[(timestamp, text)]
+
+    for root, _, files in os.walk(base_dir):
+        for fname in files:
+            if not fname.lower().endswith(".zip"):
+                continue
+            zip_path = os.path.join(root, fname)
+            try:
+                with zipfile.ZipFile(zip_path, mode="r") as zf:
+                    for info in zf.infolist():
+                        if info.is_dir():
+                            continue
+                        base = os.path.basename(info.filename)
+                        if not base.lower().endswith(".txt"):
+                            # Skip non-.txt from ZIP exports
+                            continue
+
+                        # Sanitize the basename and build output path
+                        sanitized = sanitize_txt_basename(base)
+                        out_path = os.path.join(root, sanitized)
+
+                        with zf.open(info, "r") as src:
+                            data = src.read()
+
+                        text = _decode_text(data)
+                        ts = datetime(*info.date_time).timestamp()
+                        pending_merges.setdefault(out_path, []).append((ts, text))
+                        extracted_any = True
+            except zipfile.BadZipFile:
+                # Skip invalid ZIPs gracefully
+                continue
+
+    # Include preexisting sanitized/unsanitized .txt files on disk in merges (by mtime)
+    for out_path, items in list(pending_merges.items()):
+        # Existing sanitized file
+        if os.path.exists(out_path):
+            with open(out_path, "r", encoding="utf-8", errors="ignore") as f:
+                items.append((os.path.getmtime(out_path), f.read()))
+
+        # Legacy unsanitized variant (prefix present) to fold in
+        legacy = os.path.join(os.path.dirname(out_path), "WhatsApp Chat with " + os.path.basename(out_path))
+        if os.path.exists(legacy):
+            with open(legacy, "r", encoding="utf-8", errors="ignore") as f:
+                items.append((os.path.getmtime(legacy), f.read()))
+            try:
+                os.remove(legacy)
+            except OSError:
+                pass
+
+        # Sort older first and write merged file
+        items.sort(key=lambda x: x)
+        merged = "\n".join(s.strip("\n") for _, s in items) + "\n"
+
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(merged)
+
+    return extracted_any
+
 if __name__ == "__main__":
     print("--- Starting Chatbot Setup ---")
 
@@ -352,16 +476,54 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(EXTRACTED_CHATS_DIR, 'Personal'))
         os.makedirs(os.path.join(EXTRACTED_CHATS_DIR, 'Group'))
         print(f"IMPORTANT: The directory structure has been created in '{EXTRACTED_CHATS_DIR}'.")
-        print("Please place your exported chat .txt files in the 'Personal' and 'Group' folders.")
+        print("Please place your exported chat .txt files or .zip files in the 'Personal' and 'Group' folders.")
+        print(
+            "You can organize them in subfolders - multiple files in the same subfolder will be automatically consolidated in a single persona.")
         input("\nPress Enter after you have placed your chat files in the folders...")
 
-    # Step 2: Find all chat files.
+    # Step 2: Always extract all zip files first (regardless of existing txt files)
+    print("\nSearching for and extracting zip files...")
+    personal_extraction = extract_all_zip_files(os.path.join(EXTRACTED_CHATS_DIR, 'Personal'))
+    group_extraction = extract_all_zip_files(os.path.join(EXTRACTED_CHATS_DIR, 'Group'))
+
+    if personal_extraction or group_extraction:
+        print("✓ Zip extraction completed!")
+    else:
+        print("No zip files found to extract.")
+
+    # Step 3: Find all txt files after extraction
+    print("\nScanning for .txt files...")
     personal_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Personal', '**', '*.txt'), recursive=True)
     group_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Group', '**', '*.txt'), recursive=True)
     all_chat_files = personal_chats + group_chats
 
+    if all_chat_files:
+        print(f"Found {len(all_chat_files)} .txt file(s) total.")
+    else:
+        print("No .txt files found.")
+
+    # Step 4: Consolidate multiple txt files in subfolders (AFTER extraction is complete)
+    if all_chat_files:
+        print("\nChecking for consolidation opportunities...")
+
+        print("Checking Personal directory...")
+        consolidate_txt_files_in_directory(os.path.join(EXTRACTED_CHATS_DIR, 'Personal'))
+
+        print("Checking Group directory...")
+        consolidate_txt_files_in_directory(os.path.join(EXTRACTED_CHATS_DIR, 'Group'))
+
+        print("✓ Consolidation check completed!")
+
+        print("\nFinal scan after consolidation...")
+        personal_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Personal', '**', '*.txt'), recursive=True)
+        group_chats = glob.glob(os.path.join(EXTRACTED_CHATS_DIR, 'Group', '**', '*.txt'), recursive=True)
+        all_chat_files = personal_chats + group_chats
+
+        print(f"Final count: {len(all_chat_files)} chat file(s) ready for processing.")
+
+    # Step 5: Final check for chat files
     if not all_chat_files:
-        print("WARNING: No chat files found. Please add them to the 'extracted_chats' directory.")
+        print("WARNING: No chat files found. Please add .txt or .zip files to the 'extracted_chats' directory.")
         sys.exit(0)
 
     display_persona_statistics(all_chat_files)
