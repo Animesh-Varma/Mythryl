@@ -58,7 +58,12 @@ Activate your virtual environment:
   source .venv/bin/activate  # on Windows: .venv\Scripts\activate
   ```
 
-Then install the requirements:  
+Then install the requirements:
+
+**Note** (optional): You can customize the installation based on your needs. By default it will install both:
+- For online inference only: Remove `ollama` from requirements.txt
+- For offline inference only: Remove `google-generativeai` from requirements.txt
+
   ```bash
   pip install -r requirements.txt
   ```
