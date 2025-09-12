@@ -27,7 +27,7 @@ TEMP_DIR = os.path.join(PROJECT_ROOT, 'temp')
 OUTPUT_CSV_PATH = os.path.join(TEMP_DIR, 'persona_style_v2.csv')
 DB_PATH = os.path.join(TEMP_DIR, 'style_v2.index')
 TEXT_COLUMN = 'prompt'
-MODEL_NAME = 'all-MiniLM-L6-v2'
+MODEL_NAME = 'all-mpnet-base-v2'
 
 
 def get_persona_from_path(file_path):
