@@ -10,6 +10,7 @@ import warnings
 import os
 from dotenv import load_dotenv
 import threading
+import re
 
 # --- Global Settings ---
 DEBUG = False
@@ -252,7 +253,7 @@ def main():
             if not ollama_model_name:
                 print("Model name not found. Please set it in your .env file.")
                 return
-            llm_model = "ollama"
+            llm_model = ollama
             print(f"Using Ollama server with model: {ollama_model_name}")
         except ImportError:
             print("Ollama library not found. Please install it with 'pip install ollama'")
@@ -335,6 +336,8 @@ def main():
                 elif service_choice == 'ollama':
                     response = llm_model.chat(model=ollama_model_name, messages=[{'role': 'user', 'content': prompt_for_llm}])
                     bot_response_text = response['message']['content']
+                    if not DEBUG:
+                        bot_response_text = re.sub(r'<think>.*?</think>', '', bot_response_text, flags=re.DOTALL).strip()
             finally:
                 stop_animation.set()
                 animation_thread.join()
