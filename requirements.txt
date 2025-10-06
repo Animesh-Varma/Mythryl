@@ -3,6 +3,6 @@ sentence-transformers
 faiss-cpu
 tqdm
 google-generativeai
-numpy~=2.0.2
+numpy~=2.3.3
 python-dotenv
 ollama
