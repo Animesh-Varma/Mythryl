@@ -6,3 +6,6 @@ google-generativeai
 numpy~=2.3.4
 python-dotenv
 ollama
+fastapi
+uvicorn
+thefuzz

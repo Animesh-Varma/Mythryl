@@ -551,4 +551,4 @@ if __name__ == "__main__":
     create_vector_database(OUTPUT_CSV_PATH, TEXT_COLUMN, DB_PATH, MODEL_NAME)
 
     print("\n--- Setup Complete ---")
-    print("You can now run the chatbot using: python gemini_chat.py")
+    print("You can now run the chatbot using: python chat.py")

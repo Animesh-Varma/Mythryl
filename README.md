@@ -2,6 +2,28 @@
 
 This project aims to create an easy-to-use script for building a RAG-based personalized chatbot using social interaction data (currently limited to WhatsApp chats).
 
+## Table of Contents
+
+- [Features](#features)
+- [How It Works](#how-it-works)
+  - [Setup Phase: `setup.py`](#setup-phase-setuppy)
+  - [Chat Phase: `chat.py`](#chat-phase-chatpy)
+- [Setup and Usage](#setup-and-usage)
+  - [1. Installation](#1-installation)
+  - [2. Data Generation](#2-data-generation)
+  - [3. Setting Environment Variables](#3-setting-environment-variables)
+  - [4. Running the Chatbot](#4-running-the-chatbot)
+- [API Usage](#api-usage)
+  - [Endpoints](#endpoints)
+- [Config](#config)
+- [TODO & Contributions](#todo--contributions)
+- [Tested on](#tested-on)
+- [Use of AI](#use-of-ai)
+- [Privacy](#privacy)
+  - [Local Data Processing](#local-data-processing-setuppy)
+  - [Cloud-Based AI Interaction](#cloud-based-ai-interaction-chatpy)
+- [Contact](#contact)
+
 ## Features
 
 - **Multi-Service Support:** Works with both cloud-based (Gemini) and local (Ollama) language models.
@@ -23,7 +45,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 - Validates that the provided sender name exists in the chat files before proceeding.
 - Saves sender name to `temp/sender_name.txt` for future use.
 
-**Intelligent Chat Processing:**
+**Chat Processing:**
 - Parses WhatsApp export format using regex (timestamp, sender, message).
 - Consolidates consecutive messages from the same sender and detects conversation breaks (gaps of several hours).
 - Creates 4 types of training examples: **conversation starters, contextual responses, direct Q&A pairs, and topic transitions.**
@@ -35,7 +57,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 - Saves the index to `temp/style_v2.index` for fast retrieval.
 
 
-### **Chat Phase: `gemini_chat.py`**
+### **Chat Phase: `chat.py`**
 
 **Service Selection:**
 - Prompts you to choose between the `gemini` (cloud) or `ollama` (local) service.
@@ -43,7 +65,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 **RAG-Powered Response Generation:**
 - Loads the FAISS index, conversation dataset, and the selected AI model.
 - Performs a semantic search to find similar conversation examples for your query.
-- Combines retrieved examples with conversation history to create context-rich prompts for th LLM.
+- Combines retrieved examples with conversation history to create context-rich prompts for the LLM.
 - Uses the chosen LLM (Gemini or Ollama) to generate responses that match the communication style for the given persona.
 
 ## Setup and Usage
@@ -114,15 +136,131 @@ Create a `.env` file in the root directory and add the following variables.
 
 Once your data files are ready, you can chat with your personalized AI by running:
 ```bash
-python gemini_chat.py
+python chat.py
 ```
 Inside the chat session: type **`switch`** to change persona or **`quit`** to exit.
+
+## API Usage
+
+Mythryl includes a local API server, allowing you to integrate your personalized chatbot with other applications.
+To use the API first run and follow the `setup.py`, then start the server:
+
+```bash
+python api.py
+```
+
+Then the API will be available at `http://127.0.0.1:50507`.
+
+### Endpoints
+
+---
+#### GET /personas
+
+Returns a list of all available personas.
+
+**Parameters:** None
+
+**Example Request:**
+```bash
+curl -X GET "http://127.0.0.1:50507/personas"
+```
+
+**Example Response:**
+```json
+{
+  "personas": [
+    "persona1",
+    "persona2",
+    "persona3"
+  ]
+}
+```
+---
+
+#### POST /verify_persona
+
+Verifies if the persona is available. If an exact match is not found, it suggests the closest match.
+
+**Parameters:**
+- `persona` (string, required): The name of the persona to verify.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/verify_persona" -H "Content-Type: application/json" -d '{
+  "persona": "persna1"
+}'
+```
+
+**Example Response (Closest Match):**
+```json
+{
+  "status": "closest_match",
+  "persona": "persona1",
+  "confidence": 86
+}
+```
+---
+
+#### POST /chat
+
+Handles a chat request with a specific persona.
+
+**Parameters:**
+- `persona` (string, required): The name of the persona to chat with.
+- `message` (string, required): The user's current message.
+- `service` (string, optional, default: `gemini`): The model service to use (`gemini` or `ollama`).
+- `conversation_history` (list[string], optional): A list of strings representing the recent conversation for context.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/chat" -H "Content-Type: application/json" -d '{
+  "persona": "persona1",
+  "message": "What was the last thing we talked about?",
+  "service": "gemini",
+  "conversation_history": [
+    "User: What are your hobbies?",
+    "Bot: I enjoy processing data and learning new things."
+  ]
+}'
+```
+**Example Response:**
+```json
+{
+  "response": "We talked about my hobbies."
+}
+```
+---
+
+#### POST /add_message
+
+Adds a new message to the vector database for the specified persona.
+
+**Parameters:**
+- `persona` (string, required): The persona to associate the new example with.
+- `prompt` (string, required): The new prompt or context.
+- `response` (string, required): The new response.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/add_message" -H "Content-Type: application/json" -d '{
+  "persona": "persona1",
+  "prompt": "This is a new prompt.",
+  "response": "This is a new response."
+}'
+```
+
+**Example Response:**
+```json
+{
+  "message": "Message added successfully."
+}
+```
 
 ## Config
 
 Configuration is managed through the `.env` file. You can set your API key, choose your Ollama model, and adjust LLM and script parameters. 
 If you want to change specific paths, gemini models or system prompts, you can do that directly in the scripts.
-[I'd suggest using gemini for generation as it works a lot better in my testing, the default gemini model is 2.5 flash]
+*[I'd suggest using gemini for generation as it works a lot better in my testing, the default gemini model is 2.5 flash]*
 
 ## TODO & Contributions
 
@@ -154,7 +292,9 @@ This project uses a hybrid approach to data privacy, combining local processing 
 - Generated files (`persona_style_v2.csv`, `style_v2.index`, and `sender_name.txt`) are stored in the `temp` directory on your computer.
 - **No chat data is sent to any external server or cloud service during this phase.** The sentence transformer model for vector embeddings is downloaded and runs entirely on your machine.
 
-### Cloud-Based AI Interaction (`gemini_chat.py`)
+### Cloud-Based AI Interaction (`chat.py`)
+
+*// only applicable if using gemini as the provider, choosing ollama instead does all the processing locally*
 
 - When you chat with the bot, certain pieces of information are sent to the **Google Gemini API** to generate responses. This is the only time your data leaves your local device.
 - The data sent to Gemini API includes:
