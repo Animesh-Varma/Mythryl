@@ -21,7 +21,7 @@
 ---
 
 ## 📚 Documentation
-- [ ] Update `README.md`
+- [x] Update `README.md` (October 25, 2025)
 - [x] Update `README.md` (September 12, 2025)
 - [x] Update `README.md` (August 16, 2025)
 - [x] Add .env.example (August 16, 2025)
@@ -30,6 +30,7 @@
 
 ## 🧹 Chores
 - [ ] Run a full setup from scratch on all test environments 
+- [x] Run a full setup from scratch on all test environments (September 12, 2025)
 - [x] Update `requirements.txt` (September 12, 2025)
 - [x] Update `requirements.txt` (August 16, 2025)
 
