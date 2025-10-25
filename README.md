@@ -2,6 +2,28 @@
 
 This project aims to create an easy-to-use script for building a RAG-based personalized chatbot using social interaction data (currently limited to WhatsApp chats).
 
+## Table of Contents
+
+- [Features](#features)
+- [How It Works](#how-it-works)
+  - [Setup Phase: `setup.py`](#setup-phase-setuppy)
+  - [Chat Phase: `chat.py`](#chat-phase-chatpy)
+- [Setup and Usage](#setup-and-usage)
+  - [1. Installation](#1-installation)
+  - [2. Data Generation](#2-data-generation)
+  - [3. Setting Environment Variables](#3-setting-environment-variables)
+  - [4. Running the Chatbot](#4-running-the-chatbot)
+- [API Usage](#api-usage)
+  - [Endpoints](#endpoints)
+- [Config](#config)
+- [TODO & Contributions](#todo--contributions)
+- [Tested on](#tested-on)
+- [Use of AI](#use-of-ai)
+- [Privacy](#privacy)
+  - [Local Data Processing](#local-data-processing-setuppy)
+  - [Cloud-Based AI Interaction](#cloud-based-ai-interaction-chatpy)
+- [Contact](#contact)
+
 ## Features
 
 - **Multi-Service Support:** Works with both cloud-based (Gemini) and local (Ollama) language models.
