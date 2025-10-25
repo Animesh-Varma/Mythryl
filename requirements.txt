@@ -1,8 +1,10 @@
-pandas~=2.3.2
+pandas
 sentence-transformers
 faiss-cpu
 tqdm
 google-generativeai
-numpy~=2.0.2
+numpy
 python-dotenv
 ollama
+fastapi
+uvicorn
