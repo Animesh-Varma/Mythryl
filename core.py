@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import ollama
 import re
+import numpy as np
+from thefuzz import process
 
 # --- Global Settings ---
 load_dotenv()
@@ -39,7 +41,7 @@ def load_resources(index_path=INDEX_PATH, csv_path=CSV_PATH, model_name=MODEL_NA
             return None, None, None
 
         index = faiss.read_index(index_path)
-        df = pd.read_csv(csv_path).dropna()
+        df = pd.read_csv(csv_path).dropna().reset_index(drop=True)
 
         model = SentenceTransformer(model_name)
         print("Done.")
@@ -47,7 +49,6 @@ def load_resources(index_path=INDEX_PATH, csv_path=CSV_PATH, model_name=MODEL_NA
     except Exception as e:
         print(f"\nAn unexpected error occurred while loading resources: {e}")
         return None, None, None
-
 
 def find_similar_responses(query, index, df, model, persona, k):
     """Finds k most similar responses from the database for the given persona."""
@@ -160,3 +161,37 @@ def get_llm_response(service_choice, prompt_for_llm, ollama_model_name=None):
         raise ValueError("Invalid service choice.")
         
     return bot_response_text
+
+def add_message_to_database(df, index, model, persona, prompt, response):
+    """Adds a new message to the database and updates the index."""
+    # 1. Append to CSV
+    new_entry = pd.DataFrame([{'prompt': prompt, 'response': response, 'persona': persona}])
+    new_entry.to_csv(CSV_PATH, mode='a', header=False, index=False)
+
+    # 2. Update DataFrame
+    df = pd.concat([df, new_entry], ignore_index=True)
+
+    # 3. Encode the new prompt
+    new_embedding = model.encode([prompt])
+
+    # 4. Add to FAISS index
+    index.add(np.array(new_embedding, dtype=np.float32))
+
+    # 5. Save the updated index
+    faiss.write_index(index, INDEX_PATH)
+    
+    log_debug(f"Added new message for persona '{persona}' and updated index.")
+    return df, index
+
+def verify_persona_name(df, persona_name):
+    """Verifies a persona name, suggesting the closest match if not found."""
+    available_personas = df['persona'].unique().tolist()
+    if persona_name in available_personas:
+        return {"status": "exact_match", "persona": persona_name}
+    else:
+        best_match, score = process.extractOne(persona_name, available_personas)
+        if score > 80:  # Confidence threshold
+            return {"status": "closest_match", "persona": best_match, "confidence": score}
+        else:
+            return {"status": "not_found"}
+

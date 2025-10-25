@@ -9,6 +9,8 @@ from core import (
     find_similar_responses,
     generate_llm_prompt,
     get_llm_response,
+    add_message_to_database,
+    verify_persona_name,
 )
 
 # --- Global State ---
@@ -57,6 +59,19 @@ class ChatResponse(BaseModel):
 
 class PersonasResponse(BaseModel):
     personas: list[str]
+
+class AddMessageRequest(BaseModel):
+    persona: str
+    prompt: str
+    response: str
+
+class VerifyPersonaRequest(BaseModel):
+    persona: str
+
+class VerifyPersonaResponse(BaseModel):
+    status: str
+    persona: str | None = None
+    confidence: float | None = None
 
 @app.get("/")
 def read_root():
@@ -109,6 +124,34 @@ async def chat_with_persona(request: ChatRequest):
 
         return ChatResponse(response=bot_response)
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/add_message")
+async def add_message(request: AddMessageRequest):
+    """Adds a new message to the vector database."""
+    try:
+        df, index = add_message_to_database(
+            df=state['df'],
+            index=state['index'],
+            model=state['model'],
+            persona=request.persona,
+            prompt=request.prompt,
+            response=request.response
+        )
+        # Update the state
+        state['df'] = df
+        state['index'] = index
+        return {"message": "Message added successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/verify_persona", response_model=VerifyPersonaResponse)
+async def verify_persona(request: VerifyPersonaRequest):
+    """Verifies a persona name, suggesting the closest match if not found."""
+    try:
+        result = verify_persona_name(state['df'], request.persona)
+        return VerifyPersonaResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
