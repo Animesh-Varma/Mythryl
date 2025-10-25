@@ -65,7 +65,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 **RAG-Powered Response Generation:**
 - Loads the FAISS index, conversation dataset, and the selected AI model.
 - Performs a semantic search to find similar conversation examples for your query.
-- Combines retrieved examples with conversation history to create context-rich prompts for th LLM.
+- Combines retrieved examples with conversation history to create context-rich prompts for the LLM.
 - Uses the chosen LLM (Gemini or Ollama) to generate responses that match the communication style for the given persona.
 
 ## Setup and Usage
@@ -153,9 +153,12 @@ Then the API will be available at `http://127.0.0.1:50507`.
 
 ### Endpoints
 
+---
 #### GET /personas
 
 Returns a list of all available personas.
+
+**Parameters:** None
 
 **Example Request:**
 ```bash
@@ -172,10 +175,14 @@ curl -X GET "http://127.0.0.1:50507/personas"
   ]
 }
 ```
+---
 
 #### POST /verify_persona
 
 Verifies if the persona is available. If an exact match is not found, it suggests the closest match.
+
+**Parameters:**
+- `persona` (string, required): The name of the persona to verify.
 
 **Example Request:**
 ```bash
@@ -192,30 +199,46 @@ curl -X POST "http://127.0.0.1:50507/verify_persona" -H "Content-Type: applicati
   "confidence": 86
 }
 ```
+---
 
 #### POST /chat
 
 Handles a chat request with a specific persona.
 
+**Parameters:**
+- `persona` (string, required): The name of the persona to chat with.
+- `message` (string, required): The user's current message.
+- `service` (string, optional, default: `gemini`): The model service to use (`gemini` or `ollama`).
+- `conversation_history` (list[string], optional): A list of strings representing the recent conversation for context.
+
 **Example Request:**
 ```bash
 curl -X POST "http://127.0.0.1:50507/chat" -H "Content-Type: application/json" -d '{
   "persona": "persona1",
-  "message": "Hello, how are you?",
-  "service": "gemini"
+  "message": "What was the last thing we talked about?",
+  "service": "gemini",
+  "conversation_history": [
+    "User: What are your hobbies?",
+    "Bot: I enjoy processing data and learning new things."
+  ]
 }'
 ```
-
 **Example Response:**
 ```json
 {
-  "response": "I am doing well, thank you!"
+  "response": "We talked about my hobbies."
 }
 ```
+---
 
 #### POST /add_message
 
 Adds a new message to the vector database for the specified persona.
+
+**Parameters:**
+- `persona` (string, required): The persona to associate the new example with.
+- `prompt` (string, required): The new prompt or context.
+- `response` (string, required): The new response.
 
 **Example Request:**
 ```bash
@@ -237,7 +260,7 @@ curl -X POST "http://127.0.0.1:50507/add_message" -H "Content-Type: application/
 
 Configuration is managed through the `.env` file. You can set your API key, choose your Ollama model, and adjust LLM and script parameters. 
 If you want to change specific paths, gemini models or system prompts, you can do that directly in the scripts.
-[I'd suggest using gemini for generation as it works a lot better in my testing, the default gemini model is 2.5 flash]
+*[I'd suggest using gemini for generation as it works a lot better in my testing, the default gemini model is 2.5 flash]*
 
 ## TODO & Contributions
 
