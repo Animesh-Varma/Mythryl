@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 import os
+from contextlib import asynccontextmanager
 
 from core import (
     load_resources,
@@ -10,27 +11,12 @@ from core import (
     get_llm_response,
 )
 
-app = FastAPI()
-
-# --- Data Models ---
-class ChatRequest(BaseModel):
-    persona: str
-    message: str
-    service: str = 'gemini'  # or 'ollama'
-    conversation_history: list[str] = []
-
-class ChatResponse(BaseModel):
-    response: str
-
-class PersonasResponse(BaseModel):
-    personas: list[str]
-
 # --- Global State ---
 state = {}
 
-@app.on_event("startup")
-def startup_event():
-    """Load all necessary resources when the API starts."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load all necessary resources when the API starts and clean up on shutdown."""
     print("Loading resources for the API...")
     index, df, model = load_resources()
     if index is None or df is None or model is None:
@@ -50,6 +36,27 @@ def startup_event():
     state['model'] = model
     state['sender_name'] = sender_name
     print("Resources loaded successfully.")
+    
+    yield
+    
+    # Clean up the resources
+    state.clear()
+    print("Resources cleaned up.")
+
+app = FastAPI(lifespan=lifespan)
+
+# --- Data Models ---
+class ChatRequest(BaseModel):
+    persona: str
+    message: str
+    service: str = 'gemini'  # or 'ollama'
+    conversation_history: list[str] = []
+
+class ChatResponse(BaseModel):
+    response: str
+
+class PersonasResponse(BaseModel):
+    personas: list[str]
 
 @app.get("/")
 def read_root():
