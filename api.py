@@ -11,6 +11,7 @@ from core import (
     get_llm_response,
     add_message_to_database,
     verify_persona_name,
+    VECTOR_DB_SEARCH_COUNT,
 )
 
 # --- Global State ---
@@ -104,7 +105,7 @@ async def chat_with_persona(request: ChatRequest):
             df=df,
             model=model,
             persona=request.persona,
-            k=5  # You can make this configurable
+            k=VECTOR_DB_SEARCH_COUNT
         )
 
         # Generate the prompt for the LLM
