@@ -1,4 +1,4 @@
-# gemini_chat.py
+# chat.py
 
 import faiss
 import pandas as pd

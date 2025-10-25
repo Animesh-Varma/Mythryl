@@ -23,7 +23,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 - Validates that the provided sender name exists in the chat files before proceeding.
 - Saves sender name to `temp/sender_name.txt` for future use.
 
-**Intelligent Chat Processing:**
+**Chat Processing:**
 - Parses WhatsApp export format using regex (timestamp, sender, message).
 - Consolidates consecutive messages from the same sender and detects conversation breaks (gaps of several hours).
 - Creates 4 types of training examples: **conversation starters, contextual responses, direct Q&A pairs, and topic transitions.**
@@ -35,7 +35,7 @@ This project aims to create an easy-to-use script for building a RAG-based perso
 - Saves the index to `temp/style_v2.index` for fast retrieval.
 
 
-### **Chat Phase: `gemini_chat.py`**
+### **Chat Phase: `chat.py`**
 
 **Service Selection:**
 - Prompts you to choose between the `gemini` (cloud) or `ollama` (local) service.
@@ -114,9 +114,102 @@ Create a `.env` file in the root directory and add the following variables.
 
 Once your data files are ready, you can chat with your personalized AI by running:
 ```bash
-python gemini_chat.py
+python chat.py
 ```
 Inside the chat session: type **`switch`** to change persona or **`quit`** to exit.
+
+## API Usage
+
+Mythryl includes a local API server, allowing you to integrate your personalized chatbot with other applications.
+To use the API first run and follow the `setup.py`, then start the server:
+
+```bash
+python api.py
+```
+
+Then the API will be available at `http://127.0.0.1:50507`.
+
+### Endpoints
+
+#### GET /personas
+
+Returns a list of all available personas.
+
+**Example Request:**
+```bash
+curl -X GET "http://127.0.0.1:50507/personas"
+```
+
+**Example Response:**
+```json
+{
+  "personas": [
+    "persona1",
+    "persona2",
+    "persona3"
+  ]
+}
+```
+
+#### POST /verify_persona
+
+Verifies if the persona is available. If an exact match is not found, it suggests the closest match.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/verify_persona" -H "Content-Type: application/json" -d '{
+  "persona": "persna1"
+}'
+```
+
+**Example Response (Closest Match):**
+```json
+{
+  "status": "closest_match",
+  "persona": "persona1",
+  "confidence": 86
+}
+```
+
+#### POST /chat
+
+Handles a chat request with a specific persona.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/chat" -H "Content-Type: application/json" -d '{
+  "persona": "persona1",
+  "message": "Hello, how are you?",
+  "service": "gemini"
+}'
+```
+
+**Example Response:**
+```json
+{
+  "response": "I am doing well, thank you!"
+}
+```
+
+#### POST /add_message
+
+Adds a new message to the vector database for the specified persona.
+
+**Example Request:**
+```bash
+curl -X POST "http://127.0.0.1:50507/add_message" -H "Content-Type: application/json" -d '{
+  "persona": "persona1",
+  "prompt": "This is a new prompt.",
+  "response": "This is a new response."
+}'
+```
+
+**Example Response:**
+```json
+{
+  "message": "Message added successfully."
+}
+```
 
 ## Config
 
@@ -154,7 +247,9 @@ This project uses a hybrid approach to data privacy, combining local processing 
 - Generated files (`persona_style_v2.csv`, `style_v2.index`, and `sender_name.txt`) are stored in the `temp` directory on your computer.
 - **No chat data is sent to any external server or cloud service during this phase.** The sentence transformer model for vector embeddings is downloaded and runs entirely on your machine.
 
-### Cloud-Based AI Interaction (`gemini_chat.py`)
+### Cloud-Based AI Interaction (`chat.py`)
+
+*// only applicable if using gemini as the provider, choosing ollama instead does all the processing locally*
 
 - When you chat with the bot, certain pieces of information are sent to the **Google Gemini API** to generate responses. This is the only time your data leaves your local device.
 - The data sent to Gemini API includes:
