@@ -29,6 +29,7 @@
 ---
 
 ## 🧹 Chores
+- [ ] Rename extracted_chats to chats in setup
 - [ ] Run a full setup from scratch on all test environments 
 - [x] Run a full setup from scratch on all test environments (September 12, 2025)
 - [x] Update `requirements.txt` (September 12, 2025)
