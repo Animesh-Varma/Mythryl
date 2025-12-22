@@ -3,7 +3,7 @@ sentence-transformers
 faiss-cpu
 tqdm
 google-generativeai
-numpy~=2.3.4
+numpy~=2.4.0
 python-dotenv
 ollama
 fastapi
