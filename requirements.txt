@@ -1,4 +1,4 @@
-pandas~=3.0.0
+pandas~=3.0.1
 sentence-transformers
 faiss-cpu
 tqdm
